@@ -16,7 +16,7 @@
     --line: #e3e7e5;
     --text: #1b1f1d;
     --muted: #8a938e;
-    --bought: #b8bfba;
+    --need-bg: #e7f4ec;
     --danger: #d23b3b;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -44,35 +44,54 @@
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #ffd24d; flex: 0 0 auto; }
   .dot.online { background: #7CFC9B; }
   .dot.offline { background: #ff8a8a; }
-  .header-actions { display: flex; gap: 8px; }
-  .header-btn {
+  .gear {
     background: rgba(255,255,255,0.18);
-    border: none;
-    color: #fff;
-    font-size: 14px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-weight: 600;
+    border: none; color: #fff;
+    width: 38px; height: 38px; border-radius: 9px;
+    font-size: 18px; line-height: 1;
   }
-  .header-btn:active { background: rgba(255,255,255,0.32); }
+  .gear:active { background: rgba(255,255,255,0.32); }
+  body.edit .gear { background: #fff; color: var(--green); }
 
-  .summary {
-    padding: 10px 16px;
-    color: var(--muted);
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  /* ---- TO BUY (top) ---- */
+  .tobuy {
+    background: var(--card);
+    margin: 10px;
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    overflow: hidden;
   }
-  .summary button {
-    background: none;
-    border: none;
-    color: var(--green);
-    font-weight: 600;
-    font-size: 13px;
-    padding: 4px;
+  .tobuy-head {
+    padding: 12px 14px;
+    font-weight: 700;
+    font-size: 15px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
   }
+  .tobuy-head .count {
+    font-size: 13px; color: var(--green);
+    background: var(--need-bg); border-radius: 20px; padding: 2px 10px;
+  }
+  .tobuy-body { padding: 6px 12px 14px; }
+  .tobuy-empty { color: var(--muted); font-size: 14px; padding: 16px 14px; text-align: center; }
+  .tb-group { margin-top: 10px; }
+  .tb-group h4 {
+    margin: 0 0 7px; font-size: 12px; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    background: var(--green); color: #fff;
+    border: none; border-radius: 20px;
+    padding: 8px 14px; font-size: 15px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .tag:active { background: var(--green-dark); }
+  .tag .x { font-size: 16px; opacity: .85; }
+  .clearbtn { background: none; border: none; color: var(--green); font-weight: 600; font-size: 13px; }
 
+  /* ---- FULL LIST (bottom) ---- */
+  .section-title { padding: 14px 16px 4px; font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .category {
     background: var(--card);
     margin: 8px 10px;
@@ -88,24 +107,19 @@
     font-weight: 700;
     font-size: 16px;
     background: #fff;
-    cursor: pointer;
     user-select: none;
   }
-  .cat-head .left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .cat-head .left span.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-head .left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+  .cat-head .left .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cat-head .right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
   .cat-count {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--green);
-    background: #e7f4ec;
-    border-radius: 20px;
-    padding: 2px 9px;
-    min-width: 24px;
-    text-align: center;
+    font-size: 12px; font-weight: 600; color: var(--green);
+    background: var(--need-bg); border-radius: 20px; padding: 2px 9px;
+    min-width: 24px; text-align: center;
   }
   .cat-count.zero { color: var(--muted); background: #f0f2f1; }
-  .cat-del { background: none; border: none; color: var(--danger); font-size: 18px; opacity: .5; padding: 4px 6px; line-height: 1; }
+  .cat-del { display: none; background: none; border: none; color: var(--danger); font-size: 16px; padding: 4px 6px; line-height: 1; }
+  body.edit .cat-del { display: inline-block; }
   .chevron { color: var(--muted); transition: transform .15s; font-size: 13px; }
   .category.collapsed .chevron { transform: rotate(-90deg); }
   .category.collapsed .items, .category.collapsed .add-row { display: none; }
@@ -122,18 +136,21 @@
   .check {
     width: 24px; height: 24px;
     border-radius: 50%;
-    border: 2px solid var(--green);
+    border: 2px solid #cdd4d0;
     flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 14px;
   }
-  .item.bought .check { background: var(--green); }
-  .item.bought .label { color: var(--bought); text-decoration: line-through; }
+  .item.need { background: var(--need-bg); }
+  .item.need .check { background: var(--green); border-color: var(--green); }
+  .item.need .label { font-weight: 600; color: var(--green-dark); }
   .label { flex: 1; }
   .del {
+    display: none;
     background: none; border: none; color: var(--danger);
-    font-size: 20px; padding: 4px 6px; line-height: 1; opacity: .55;
+    font-size: 20px; padding: 4px 6px; line-height: 1; opacity: .6;
   }
+  body.edit .del { display: inline-block; }
 
   .add-row {
     display: flex;
@@ -159,6 +176,17 @@
     font-size: 22px; font-weight: 600;
   }
   .add-row button:active { background: var(--green-dark); }
+
+  .add-cat-btn {
+    display: none;
+    margin: 6px 10px 0;
+    width: calc(100% - 20px);
+    background: #fff; color: var(--green);
+    border: 1.5px dashed var(--green);
+    border-radius: 12px; padding: 14px;
+    font-size: 15px; font-weight: 600;
+  }
+  body.edit .add-cat-btn { display: block; }
 
   .fab {
     position: fixed;
@@ -201,17 +229,21 @@
 
 <header>
   <h1><span class="dot" id="statusDot"></span> Spesa</h1>
-  <div class="header-actions">
-    <button class="header-btn" id="btnCat">+ Categoria</button>
-  </div>
+  <button class="gear" id="btnGear" title="Impostazioni">&#9881;</button>
 </header>
 
-<div class="summary">
-  <span id="summaryText">0 da comprare</span>
-  <button id="btnClear">Svuota comprati</button>
+<!-- TO BUY -->
+<div class="tobuy">
+  <div class="tobuy-head">
+    <span>Da comprare <span class="count" id="tbCount">0</span></span>
+    <button class="clearbtn" id="btnClear">Svuota</button>
+  </div>
+  <div class="tobuy-body" id="tobuyBody"></div>
 </div>
 
+<div class="section-title">Lista completa</div>
 <div id="list"></div>
+<button class="add-cat-btn" id="btnCat">+ Nuova categoria</button>
 
 <button class="fab" id="fabAdd">+</button>
 
@@ -242,14 +274,9 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, set, onDisconnect, goOffline }
+import { getDatabase, ref, onValue, set }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-/* ============================================================
-   1) PASTE YOUR FIREBASE CONFIG HERE to enable shared sync.
-      Leave the apiKey as "" to run purely local (localStorage).
-      See setup steps in the chat.
-   ============================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyBAlnSafWq49z3D6o8fFUr5saSVsj5GDD8",
   authDomain: "groceries-d6616.firebaseapp.com",
@@ -260,10 +287,9 @@ const firebaseConfig = {
   appId: "1:594673376000:web:e554686a4fe4f860b9b1e5",
   measurementId: "G-R8MMWYWPP9"
 };
-// Shared list id. Everyone using the same ROOM sees the same list.
 const ROOM = "casa";
 
-// ---- Default data (your categories) ----
+// ---- Default data ----
 const DEFAULT = {
   "Verdura": ["Patate","Pomodori","Limoni","Zucchine","Carote","Aglio","Lattuga","Cipolla","Sedano","Verd Surgelata","Minestrone","Friarielli"],
   "Proteine": ["Salmone","Pollo","Uova","Carne","Tonno","Pesce","Wurst veg","Prosc veg","Parmigiano","Jocca","Feta"],
@@ -278,117 +304,132 @@ const DEFAULT = {
 };
 
 const KEY = "spesa_v1";
+let state = normalize(loadLocal());
+let editMode = false;
 
-// ---- State ----
-let state = loadLocal();
-
-// ---- Backend wiring ----
+// ---- Backend ----
 const syncEnabled = !!firebaseConfig.apiKey && !!firebaseConfig.databaseURL;
-let dbRef = null;
-let applyingRemote = false;     // true while we apply a remote snapshot
-let writeTimer = null;
-
+let dbRef = null, applyingRemote = false, writeTimer = null;
 const statusDot = document.getElementById("statusDot");
-function setStatus(cls) { statusDot.className = "dot " + cls; }
+const setStatus = c => statusDot.className = "dot " + c;
 
 if (syncEnabled) {
   try {
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     dbRef = ref(db, "lists/" + ROOM);
-
-    // connection indicator
-    const connRef = ref(db, ".info/connected");
-    onValue(connRef, snap => setStatus(snap.val() ? "online" : "offline"));
-
-    // live updates
+    onValue(ref(db, ".info/connected"), s => setStatus(s.val() ? "online" : "offline"));
     onValue(dbRef, snap => {
       const remote = snap.val();
       if (remote && Array.isArray(remote.categories)) {
-        const incoming = JSON.stringify(remote);
-        if (incoming !== JSON.stringify(state)) {
+        const norm = normalize(remote);
+        if (JSON.stringify(norm) !== JSON.stringify(state)) {
           applyingRemote = true;
-          state = remote;
+          state = norm;
           saveLocal();
           render();
           applyingRemote = false;
         }
       } else {
-        // first run on an empty room: seed it
         push();
       }
     });
-  } catch (e) {
-    console.error("Firebase init failed, running local only:", e);
-    setStatus("offline");
-  }
-} else {
-  setStatus(""); // neutral (local only)
-}
+  } catch (e) { console.error("Firebase init failed:", e); setStatus("offline"); }
+} else { setStatus(""); }
 
 // ---- Persistence ----
 function loadLocal() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
+  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch (e) {}
   return seed();
 }
 function seed() {
-  return {
-    categories: Object.keys(DEFAULT).map(name => ({
-      name,
-      collapsed: false,
-      items: DEFAULT[name].map(n => ({ name: n, bought: false }))
-    }))
-  };
+  return { categories: Object.keys(DEFAULT).map(name => ({
+    name, collapsed: false, items: DEFAULT[name].map(n => ({ name: n, need: false }))
+  })) };
 }
-function saveLocal() {
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+// ensure shape + migrate old "bought" field away; default need=false
+function normalize(s) {
+  if (!s || !Array.isArray(s.categories)) return seed();
+  return { categories: s.categories.map(c => ({
+    name: String(c.name || ""),
+    collapsed: !!c.collapsed,
+    items: Array.isArray(c.items) ? c.items.map(i => ({
+      name: String(i.name || ""),
+      need: !!i.need   // old data had "bought"; we intentionally start fresh as not-to-buy
+    })) : []
+  })) };
 }
-// push current state to backend (debounced)
+function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 function push() {
   if (!dbRef || applyingRemote) return;
   clearTimeout(writeTimer);
-  writeTimer = setTimeout(() => { set(dbRef, state).catch(err => console.error(err)); }, 150);
+  writeTimer = setTimeout(() => set(dbRef, state).catch(console.error), 150);
 }
-// call after every local change
-function save() {
-  saveLocal();
-  push();
-}
+function save() { saveLocal(); push(); }
 
 // ---- Rendering ----
 const listEl = document.getElementById("list");
-const summaryEl = document.getElementById("summaryText");
+const tobuyBody = document.getElementById("tobuyBody");
+const tbCount = document.getElementById("tbCount");
 
 function render() {
-  listEl.innerHTML = "";
-  let toBuy = 0;
+  renderToBuy();
+  renderList();
+}
 
+function renderToBuy() {
+  tobuyBody.innerHTML = "";
+  let total = 0;
+  state.categories.forEach(cat => {
+    const needed = cat.items.filter(i => i.need);
+    if (!needed.length) return;
+    total += needed.length;
+    const g = document.createElement("div");
+    g.className = "tb-group";
+    const h = document.createElement("h4");
+    h.textContent = cat.name;
+    g.appendChild(h);
+    const tags = document.createElement("div");
+    tags.className = "tags";
+    needed.forEach(item => {
+      const t = document.createElement("button");
+      t.className = "tag";
+      t.innerHTML = esc(item.name) + ' <span class="x">&times;</span>';
+      t.addEventListener("click", () => { item.need = false; save(); render(); });
+      tags.appendChild(t);
+    });
+    g.appendChild(tags);
+    tobuyBody.appendChild(g);
+  });
+  tbCount.textContent = total;
+  if (!total) {
+    tobuyBody.innerHTML = '<div class="tobuy-empty">Niente da comprare. Tocca un articolo nella lista qui sotto per aggiungerlo.</div>';
+  }
+}
+
+function renderList() {
+  listEl.innerHTML = "";
   state.categories.forEach((cat) => {
-    const remaining = cat.items.filter(i => !i.bought).length;
-    toBuy += remaining;
+    const needCount = cat.items.filter(i => i.need).length;
 
     const catDiv = document.createElement("div");
     catDiv.className = "category" + (cat.collapsed ? " collapsed" : "");
 
-    // header
     const head = document.createElement("div");
     head.className = "cat-head";
 
     const left = document.createElement("div");
     left.className = "left";
     left.innerHTML =
-      '<span class="chevron">▼</span><span class="name">' + esc(cat.name) + '</span>' +
-      '<span class="cat-count' + (remaining === 0 ? " zero" : "") + '">' + remaining + '</span>';
+      '<span class="chevron">&#9660;</span><span class="name">' + esc(cat.name) + '</span>' +
+      '<span class="cat-count' + (needCount === 0 ? " zero" : "") + '">' + needCount + '</span>';
     left.addEventListener("click", () => { cat.collapsed = !cat.collapsed; save(); render(); });
 
     const right = document.createElement("div");
     right.className = "right";
     const catDel = document.createElement("button");
     catDel.className = "cat-del";
-    catDel.textContent = "🗑";
+    catDel.innerHTML = "&#128465;";
     catDel.addEventListener("click", (e) => {
       e.stopPropagation();
       if (confirm('Eliminare la categoria "' + cat.name + '" e tutti i suoi articoli?')) {
@@ -402,31 +443,25 @@ function render() {
     head.appendChild(right);
     catDiv.appendChild(head);
 
-    // items
     const ul = document.createElement("ul");
     ul.className = "items";
     cat.items.forEach((item, ii) => {
       const li = document.createElement("li");
-      li.className = "item" + (item.bought ? " bought" : "");
+      li.className = "item" + (item.need ? " need" : "");
       const check = document.createElement("div");
       check.className = "check";
-      check.textContent = item.bought ? "✓" : "";
+      check.innerHTML = item.need ? "&#10003;" : "";
       const label = document.createElement("span");
       label.className = "label";
       label.textContent = item.name;
       const del = document.createElement("button");
       del.className = "del";
-      del.textContent = "×";
+      del.innerHTML = "&times;";
 
-      const toggle = () => { item.bought = !item.bought; save(); render(); };
+      const toggle = () => { item.need = !item.need; save(); render(); };
       check.addEventListener("click", toggle);
       label.addEventListener("click", toggle);
-
-      del.addEventListener("click", (e) => {
-        e.stopPropagation();
-        cat.items.splice(ii, 1);
-        save(); render();
-      });
+      del.addEventListener("click", (e) => { e.stopPropagation(); cat.items.splice(ii, 1); save(); render(); });
 
       li.appendChild(check);
       li.appendChild(label);
@@ -435,44 +470,41 @@ function render() {
     });
     catDiv.appendChild(ul);
 
-    // inline add row
     const addRow = document.createElement("div");
     addRow.className = "add-row";
     const inp = document.createElement("input");
-    inp.type = "text";
-    inp.placeholder = "Aggiungi a " + cat.name;
-    inp.autocomplete = "off";
+    inp.type = "text"; inp.placeholder = "Aggiungi a " + cat.name; inp.autocomplete = "off";
     const addBtn = document.createElement("button");
-    addBtn.textContent = "+";
+    addBtn.innerHTML = "+";
     const doAdd = () => {
-      const v = inp.value.trim();
-      if (!v) return;
-      cat.items.push({ name: v, bought: false });
-      inp.value = "";
-      save(); render();
+      const v = inp.value.trim(); if (!v) return;
+      cat.items.push({ name: v, need: false });
+      inp.value = ""; save(); render();
     };
     addBtn.addEventListener("click", doAdd);
     inp.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-    addRow.appendChild(inp);
-    addRow.appendChild(addBtn);
+    addRow.appendChild(inp); addRow.appendChild(addBtn);
     catDiv.appendChild(addRow);
 
     listEl.appendChild(catDiv);
   });
-
-  summaryEl.textContent = toBuy + " da comprare";
 }
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 }
 
-// ---- Clear bought ----
+// ---- Settings / edit mode ----
+document.getElementById("btnGear").addEventListener("click", () => {
+  editMode = !editMode;
+  document.body.classList.toggle("edit", editMode);
+});
+
+// ---- Clear all to-buy ----
 document.getElementById("btnClear").addEventListener("click", () => {
-  const any = state.categories.some(c => c.items.some(i => i.bought));
-  if (!any) return;
-  if (!confirm("Rimuovere tutti gli articoli comprati?")) return;
-  state.categories.forEach(c => { c.items = c.items.filter(i => !i.bought); });
+  if (!state.categories.some(c => c.items.some(i => i.need))) return;
+  if (!confirm("Svuotare la lista da comprare?")) return;
+  state.categories.forEach(c => c.items.forEach(i => i.need = false));
   save(); render();
 });
 
@@ -480,9 +512,8 @@ document.getElementById("btnClear").addEventListener("click", () => {
 const modalItem = document.getElementById("modalItem");
 const itemName = document.getElementById("itemName");
 const itemCat = document.getElementById("itemCat");
-
 document.getElementById("fabAdd").addEventListener("click", () => {
-  if (!state.categories.length) { alert("Crea prima una categoria."); return; }
+  if (!state.categories.length) { alert("Crea prima una categoria (rotellina impostazioni)."); return; }
   itemCat.innerHTML = state.categories.map((c,i) => '<option value="'+i+'">'+esc(c.name)+'</option>').join("");
   itemName.value = "";
   modalItem.classList.add("open");
@@ -492,11 +523,10 @@ document.getElementById("itemCancel").addEventListener("click", () => modalItem.
 document.getElementById("itemSave").addEventListener("click", saveItem);
 itemName.addEventListener("keydown", e => { if (e.key === "Enter") saveItem(); });
 function saveItem() {
-  const v = itemName.value.trim();
-  if (!v) return;
+  const v = itemName.value.trim(); if (!v) return;
   const ci = parseInt(itemCat.value, 10);
   if (state.categories[ci]) {
-    state.categories[ci].items.push({ name: v, bought: false });
+    state.categories[ci].items.push({ name: v, need: true }); // aggiunto = subito da comprare
     state.categories[ci].collapsed = false;
   }
   modalItem.classList.remove("open");
@@ -515,14 +545,12 @@ document.getElementById("catCancel").addEventListener("click", () => modalCat.cl
 document.getElementById("catSave").addEventListener("click", saveCat);
 catName.addEventListener("keydown", e => { if (e.key === "Enter") saveCat(); });
 function saveCat() {
-  const v = catName.value.trim();
-  if (!v) return;
+  const v = catName.value.trim(); if (!v) return;
   state.categories.push({ name: v, collapsed: false, items: [] });
   modalCat.classList.remove("open");
   save(); render();
 }
 
-// close modal by tapping background
 [modalItem, modalCat].forEach(m => {
   m.addEventListener("click", e => { if (e.target === m) m.classList.remove("open"); });
 });
