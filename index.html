@@ -223,6 +223,28 @@
   .modal .row button { flex: 1; padding: 13px; border-radius: 8px; font-size: 16px; font-weight: 600; border: none; }
   .btn-primary { background: var(--green); color: #fff; }
   .btn-ghost { background: #eef0ef; color: var(--text); }
+
+  /* ---- Undo toast ---- */
+  .toast {
+    position: fixed;
+    left: 50%; bottom: 86px;
+    transform: translateX(-50%) translateY(20px);
+    background: #1b1f1d; color: #fff;
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+    font-size: 14px;
+    z-index: 50;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .toast button {
+    background: none; border: none; color: #7CFC9B;
+    font-weight: 700; font-size: 14px; padding: 4px 6px; flex: 0 0 auto;
+  }
 </style>
 </head>
 <body>
@@ -246,6 +268,12 @@
 <button class="add-cat-btn" id="btnCat">+ Nuova categoria</button>
 
 <button class="fab" id="fabAdd">+</button>
+
+<!-- Undo toast -->
+<div class="toast" id="toast">
+  <span id="toastMsg"></span>
+  <button id="toastUndo">Annulla</button>
+</div>
 
 <!-- Add item modal -->
 <div class="modal-bg" id="modalItem">
@@ -274,7 +302,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, set }
+import { getDatabase, ref, onValue, set, update, remove }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
@@ -303,85 +331,201 @@ const DEFAULT = {
   "Casa": ["Fazzoletti","Carta Igienica","Carta Forno","Pellicola","Spazzatura","Rotolone","Lucido scarpe","Tovaglioli","Autan","Carta Regalo"]
 };
 
-const KEY = "spesa_v1";
-let state = normalize(loadLocal());
+/* Data model (keyed objects with stable IDs so we can write one field at a time
+   instead of overwriting the whole list -> no more "stale device wipes everything"):
+   state = { cats: { <catId>: { name, order, collapsed, items: { <itemId>: { name, order, need } } } } } */
+
+const KEY = "spesa_v2";
+let state = toKeyed(loadLocalRaw());
 let editMode = false;
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 // ---- Backend ----
 const syncEnabled = !!firebaseConfig.apiKey && !!firebaseConfig.databaseURL;
-let dbRef = null, applyingRemote = false, writeTimer = null;
+let db = null;
 const statusDot = document.getElementById("statusDot");
 const setStatus = c => statusDot.className = "dot " + c;
 
 if (syncEnabled) {
   try {
     const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    dbRef = ref(db, "lists/" + ROOM);
+    db = getDatabase(app);
     onValue(ref(db, ".info/connected"), s => setStatus(s.val() ? "online" : "offline"));
-    onValue(dbRef, snap => {
+    onValue(ref(db, "lists/" + ROOM), snap => {
       const remote = snap.val();
-      if (remote && Array.isArray(remote.categories)) {
-        const norm = normalize(remote);
-        if (JSON.stringify(norm) !== JSON.stringify(state)) {
-          applyingRemote = true;
-          state = norm;
-          saveLocal();
-          render();
-          applyingRemote = false;
-        }
-      } else {
-        push();
+      if (!remote) {                       // empty DB -> seed once from local
+        pushFull();
+        return;
       }
+      if (remote.categories && !remote.cats) {   // old array format -> migrate once
+        state = toKeyed(remote);
+        saveLocal();
+        pushFull();                        // rewrite DB in the new safe format
+        render();
+        return;
+      }
+      state = fromRemote(remote);          // normal path: apply shared truth
+      saveLocal();
+      render();
     });
   } catch (e) { console.error("Firebase init failed:", e); setStatus("offline"); }
 } else { setStatus(""); }
 
-// ---- Persistence ----
-function loadLocal() {
+// ---- Granular writers (each touches only its own path) ----
+function wField(path, val) { if (db) set(ref(db, `lists/${ROOM}/${path}`), val).catch(console.error); }
+function wRemove(path)     { if (db) remove(ref(db, `lists/${ROOM}/${path}`)).catch(console.error); }
+function wUpdate(obj)      { if (db) update(ref(db, `lists/${ROOM}`), obj).catch(console.error); }
+function pushFull()        { if (db) set(ref(db, `lists/${ROOM}`), state).catch(console.error); }
+
+// ---- Persistence / shape ----
+function loadLocalRaw() {
   try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch (e) {}
-  return seed();
-}
-function seed() {
-  return { categories: Object.keys(DEFAULT).map(name => ({
-    name, collapsed: false, items: DEFAULT[name].map(n => ({ name: n, need: false }))
-  })) };
-}
-// ensure shape + migrate old "bought" field away; default need=false
-function normalize(s) {
-  if (!s || !Array.isArray(s.categories)) return seed();
-  return { categories: s.categories.map(c => ({
-    name: String(c.name || ""),
-    collapsed: !!c.collapsed,
-    items: Array.isArray(c.items) ? c.items.map(i => ({
-      name: String(i.name || ""),
-      need: !!i.need   // old data had "bought"; we intentionally start fresh as not-to-buy
-    })) : []
-  })) };
+  try { const old = localStorage.getItem("spesa_v1"); if (old) return JSON.parse(old); } catch (e) {}
+  return null;
 }
 function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
-function push() {
-  if (!dbRef || applyingRemote) return;
-  clearTimeout(writeTimer);
-  writeTimer = setTimeout(() => set(dbRef, state).catch(console.error), 150);
+
+function seedKeyed() {
+  const cats = {};
+  Object.keys(DEFAULT).forEach((name, ci) => {
+    const items = {};
+    DEFAULT[name].forEach((n, ii) => { items[uid()] = { name: n, order: ii, need: false }; });
+    cats[uid()] = { name, order: ci, collapsed: false, items };
+  });
+  return { cats };
 }
-function save() { saveLocal(); push(); }
+// normalize a snapshot already in keyed format
+function fromRemote(r) {
+  const cats = {};
+  const src = (r && r.cats) || {};
+  Object.keys(src).forEach(cid => {
+    const c = src[cid] || {};
+    const items = {};
+    const isrc = c.items || {};
+    Object.keys(isrc).forEach(iid => {
+      const it = isrc[iid] || {};
+      items[iid] = { name: String(it.name || ""), order: Number(it.order) || 0, need: !!it.need };
+    });
+    cats[cid] = { name: String(c.name || ""), order: Number(c.order) || 0, collapsed: !!c.collapsed, items };
+  });
+  return { cats };
+}
+// accept either keyed format or the old array format (localStorage / old DB)
+function toKeyed(s) {
+  if (s && s.cats) return fromRemote(s);
+  const arr = (s && Array.isArray(s.categories)) ? s.categories : null;
+  if (!arr) return seedKeyed();
+  const cats = {};
+  arr.forEach((c, ci) => {
+    const items = {};
+    (c.items || []).forEach((it, ii) => { items[uid()] = { name: String(it.name || ""), order: ii, need: !!it.need }; });
+    cats[uid()] = { name: String(c.name || ""), order: ci, collapsed: !!c.collapsed, items };
+  });
+  return { cats };
+}
+
+// ---- Sorted views ----
+function catList() {
+  return Object.entries(state.cats).map(([id, c]) => ({ id, ...c })).sort((a, b) => a.order - b.order);
+}
+function itemList(cat) {
+  return Object.entries(cat.items || {}).map(([id, i]) => ({ id, ...i })).sort((a, b) => a.order - b.order);
+}
+function nextCatOrder() { return Object.values(state.cats).reduce((m, c) => Math.max(m, c.order || 0), -1) + 1; }
+function nextItemOrder(cat) { return Object.values(cat.items || {}).reduce((m, i) => Math.max(m, i.order || 0), -1) + 1; }
+
+// ---- Operations (mutate local + write only the changed path) ----
+function setNeed(cid, iid, val) {
+  const it = state.cats[cid] && state.cats[cid].items[iid];
+  if (!it) return;
+  it.need = val;
+  saveLocal(); wField(`cats/${cid}/items/${iid}/need`, val); render();
+}
+function toggleNeed(cid, iid) {
+  const it = state.cats[cid] && state.cats[cid].items[iid];
+  if (it) setNeed(cid, iid, !it.need);
+}
+function addItem(cid, name, need) {
+  const cat = state.cats[cid]; if (!cat) return;
+  const iid = uid();
+  const data = { name, order: nextItemOrder(cat), need: !!need };
+  cat.items = cat.items || {};
+  cat.items[iid] = data;
+  if (cat.collapsed) { cat.collapsed = false; wField(`cats/${cid}/collapsed`, false); }
+  saveLocal(); wField(`cats/${cid}/items/${iid}`, data); render();
+}
+function deleteItem(cid, iid) {
+  const cat = state.cats[cid]; const it = cat && cat.items[iid]; if (!it) return;
+  const data = { ...it };
+  delete cat.items[iid];
+  saveLocal(); wRemove(`cats/${cid}/items/${iid}`); render();
+  showUndo('"' + data.name + '" eliminato', () => {
+    if (!state.cats[cid]) return;
+    state.cats[cid].items[iid] = data;
+    saveLocal(); wField(`cats/${cid}/items/${iid}`, data); render();
+  });
+}
+function addCat(name) {
+  const cid = uid();
+  const data = { name, order: nextCatOrder(), collapsed: false, items: {} };
+  state.cats[cid] = data;
+  saveLocal(); wField(`cats/${cid}`, data); render();
+}
+function deleteCat(cid) {
+  const cat = state.cats[cid]; if (!cat) return;
+  const data = JSON.parse(JSON.stringify(cat));
+  delete state.cats[cid];
+  saveLocal(); wRemove(`cats/${cid}`); render();
+  showUndo('Categoria "' + data.name + '" eliminata', () => {
+    state.cats[cid] = data;
+    saveLocal(); wField(`cats/${cid}`, data); render();
+  });
+}
+function toggleCollapse(cid) {
+  const cat = state.cats[cid]; if (!cat) return;
+  cat.collapsed = !cat.collapsed;
+  saveLocal(); wField(`cats/${cid}/collapsed`, cat.collapsed); render();
+}
+function clearAllNeed() {
+  const cleared = [];
+  const updates = {};
+  Object.keys(state.cats).forEach(cid => {
+    const items = state.cats[cid].items || {};
+    Object.keys(items).forEach(iid => {
+      if (items[iid].need) {
+        items[iid].need = false;
+        cleared.push([cid, iid]);
+        updates[`cats/${cid}/items/${iid}/need`] = false;
+      }
+    });
+  });
+  if (!cleared.length) return;
+  saveLocal(); wUpdate(updates); render();
+  showUndo("Lista svuotata", () => {
+    const back = {};
+    cleared.forEach(([cid, iid]) => {
+      if (state.cats[cid] && state.cats[cid].items[iid]) {
+        state.cats[cid].items[iid].need = true;
+        back[`cats/${cid}/items/${iid}/need`] = true;
+      }
+    });
+    saveLocal(); wUpdate(back); render();
+  });
+}
 
 // ---- Rendering ----
 const listEl = document.getElementById("list");
 const tobuyBody = document.getElementById("tobuyBody");
 const tbCount = document.getElementById("tbCount");
 
-function render() {
-  renderToBuy();
-  renderList();
-}
+function render() { renderToBuy(); renderList(); }
 
 function renderToBuy() {
   tobuyBody.innerHTML = "";
   let total = 0;
-  state.categories.forEach(cat => {
-    const needed = cat.items.filter(i => i.need);
+  catList().forEach(cat => {
+    const needed = itemList(cat).filter(i => i.need);
     if (!needed.length) return;
     total += needed.length;
     const g = document.createElement("div");
@@ -395,7 +539,7 @@ function renderToBuy() {
       const t = document.createElement("button");
       t.className = "tag";
       t.innerHTML = esc(item.name) + ' <span class="x">&times;</span>';
-      t.addEventListener("click", () => { item.need = false; save(); render(); });
+      t.addEventListener("click", () => setNeed(cat.id, item.id, false));
       tags.appendChild(t);
     });
     g.appendChild(tags);
@@ -409,8 +553,9 @@ function renderToBuy() {
 
 function renderList() {
   listEl.innerHTML = "";
-  state.categories.forEach((cat) => {
-    const needCount = cat.items.filter(i => i.need).length;
+  catList().forEach((cat) => {
+    const its = itemList(cat);
+    const needCount = its.filter(i => i.need).length;
 
     const catDiv = document.createElement("div");
     catDiv.className = "category" + (cat.collapsed ? " collapsed" : "");
@@ -423,20 +568,14 @@ function renderList() {
     left.innerHTML =
       '<span class="chevron">&#9660;</span><span class="name">' + esc(cat.name) + '</span>' +
       '<span class="cat-count' + (needCount === 0 ? " zero" : "") + '">' + needCount + '</span>';
-    left.addEventListener("click", () => { cat.collapsed = !cat.collapsed; save(); render(); });
+    left.addEventListener("click", () => toggleCollapse(cat.id));
 
     const right = document.createElement("div");
     right.className = "right";
     const catDel = document.createElement("button");
     catDel.className = "cat-del";
     catDel.innerHTML = "&#128465;";
-    catDel.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (confirm('Eliminare la categoria "' + cat.name + '" e tutti i suoi articoli?')) {
-        state.categories = state.categories.filter(c => c !== cat);
-        save(); render();
-      }
-    });
+    catDel.addEventListener("click", (e) => { e.stopPropagation(); deleteCat(cat.id); });
     right.appendChild(catDel);
 
     head.appendChild(left);
@@ -445,7 +584,7 @@ function renderList() {
 
     const ul = document.createElement("ul");
     ul.className = "items";
-    cat.items.forEach((item, ii) => {
+    its.forEach((item) => {
       const li = document.createElement("li");
       li.className = "item" + (item.need ? " need" : "");
       const check = document.createElement("div");
@@ -458,10 +597,9 @@ function renderList() {
       del.className = "del";
       del.innerHTML = "&times;";
 
-      const toggle = () => { item.need = !item.need; save(); render(); };
-      check.addEventListener("click", toggle);
-      label.addEventListener("click", toggle);
-      del.addEventListener("click", (e) => { e.stopPropagation(); cat.items.splice(ii, 1); save(); render(); });
+      check.addEventListener("click", () => toggleNeed(cat.id, item.id));
+      label.addEventListener("click", () => toggleNeed(cat.id, item.id));
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteItem(cat.id, item.id); });
 
       li.appendChild(check);
       li.appendChild(label);
@@ -478,8 +616,8 @@ function renderList() {
     addBtn.innerHTML = "+";
     const doAdd = () => {
       const v = inp.value.trim(); if (!v) return;
-      cat.items.push({ name: v, need: false });
-      inp.value = ""; save(); render();
+      inp.value = "";
+      addItem(cat.id, v, false);
     };
     addBtn.addEventListener("click", doAdd);
     inp.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
@@ -494,6 +632,23 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 }
 
+// ---- Undo toast ----
+const toast = document.getElementById("toast");
+const toastMsg = document.getElementById("toastMsg");
+let undoFn = null, toastTimer = null;
+function showUndo(msg, fn) {
+  undoFn = fn || null;
+  toastMsg.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.classList.remove("show"); undoFn = null; }, 6000);
+}
+document.getElementById("toastUndo").addEventListener("click", () => {
+  const fn = undoFn; undoFn = null;
+  toast.classList.remove("show");
+  if (fn) fn();
+});
+
 // ---- Settings / edit mode ----
 document.getElementById("btnGear").addEventListener("click", () => {
   editMode = !editMode;
@@ -501,20 +656,16 @@ document.getElementById("btnGear").addEventListener("click", () => {
 });
 
 // ---- Clear all to-buy ----
-document.getElementById("btnClear").addEventListener("click", () => {
-  if (!state.categories.some(c => c.items.some(i => i.need))) return;
-  if (!confirm("Svuotare la lista da comprare?")) return;
-  state.categories.forEach(c => c.items.forEach(i => i.need = false));
-  save(); render();
-});
+document.getElementById("btnClear").addEventListener("click", clearAllNeed);
 
 // ---- Add item modal ----
 const modalItem = document.getElementById("modalItem");
 const itemName = document.getElementById("itemName");
 const itemCat = document.getElementById("itemCat");
 document.getElementById("fabAdd").addEventListener("click", () => {
-  if (!state.categories.length) { alert("Crea prima una categoria (rotellina impostazioni)."); return; }
-  itemCat.innerHTML = state.categories.map((c,i) => '<option value="'+i+'">'+esc(c.name)+'</option>').join("");
+  const cats = catList();
+  if (!cats.length) { alert("Crea prima una categoria (rotellina impostazioni)."); return; }
+  itemCat.innerHTML = cats.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join("");
   itemName.value = "";
   modalItem.classList.add("open");
   setTimeout(() => itemName.focus(), 100);
@@ -524,13 +675,9 @@ document.getElementById("itemSave").addEventListener("click", saveItem);
 itemName.addEventListener("keydown", e => { if (e.key === "Enter") saveItem(); });
 function saveItem() {
   const v = itemName.value.trim(); if (!v) return;
-  const ci = parseInt(itemCat.value, 10);
-  if (state.categories[ci]) {
-    state.categories[ci].items.push({ name: v, need: true }); // aggiunto = subito da comprare
-    state.categories[ci].collapsed = false;
-  }
+  const cid = itemCat.value;
   modalItem.classList.remove("open");
-  save(); render();
+  addItem(cid, v, true); // aggiunto = subito da comprare
 }
 
 // ---- Add category modal ----
@@ -546,9 +693,8 @@ document.getElementById("catSave").addEventListener("click", saveCat);
 catName.addEventListener("keydown", e => { if (e.key === "Enter") saveCat(); });
 function saveCat() {
   const v = catName.value.trim(); if (!v) return;
-  state.categories.push({ name: v, collapsed: false, items: [] });
   modalCat.classList.remove("open");
-  save(); render();
+  addCat(v);
 }
 
 [modalItem, modalCat].forEach(m => {
