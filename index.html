@@ -528,16 +528,21 @@ function renderToBuy() {
     const needed = itemList(cat).filter(i => i.need);
     if (!needed.length) return;
     total += needed.length;
+    const palette = categoryPalette[Math.abs(cat.order) % categoryPalette.length];
     const g = document.createElement("div");
     g.className = "tb-group";
+    g.style.setProperty("--cat-accent", palette.accent);
+    g.style.setProperty("--cat-tint", palette.tint);
     const h = document.createElement("h4");
     h.textContent = cat.name;
+    h.style.color = palette.accent;
     g.appendChild(h);
     const tags = document.createElement("div");
     tags.className = "tags";
     needed.forEach(item => {
       const t = document.createElement("button");
       t.className = "tag";
+      t.style.backgroundColor = palette.accent;
       t.innerHTML = esc(item.name) + ' <span class="x">&times;</span>';
       t.addEventListener("click", () => setNeed(cat.id, item.id, false));
       tags.appendChild(t);
@@ -701,7 +706,110 @@ function saveCat() {
   m.addEventListener("click", e => { if (e.target === m) m.classList.remove("open"); });
 });
 
+// ---- Bulk category controls / category colours ----
+const categoryPalette = [
+  { accent: "#2e7d32", tint: "#e8f5e9" },
+  { accent: "#c62828", tint: "#ffebee" },
+  { accent: "#1565c0", tint: "#e3f2fd" },
+  { accent: "#d35400", tint: "#fff3e0" },
+  { accent: "#6a1b9a", tint: "#f3e5f5" },
+  { accent: "#00796b", tint: "#e0f2f1" },
+  { accent: "#ad1457", tint: "#fce4ec" },
+  { accent: "#3949ab", tint: "#e8eaf6" },
+  { accent: "#795548", tint: "#efebe9" },
+  { accent: "#00838f", tint: "#e0f7fa" }
+];
+
+const bulkStyle = document.createElement("style");
+bulkStyle.textContent = `
+  .section-title.section-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; padding: 14px 12px 4px 16px;
+  }
+  .bulk-controls { display: flex; gap: 7px; }
+  .bulk-btn {
+    border: 1px solid #cfd7d3; background: #fff; color: #55605b;
+    border-radius: 8px; padding: 7px 10px; font: inherit;
+    font-size: 12px; font-weight: 700; text-transform: none; letter-spacing: 0;
+  }
+  .bulk-btn:active:not(:disabled) { background: #e9eeeb; }
+  .bulk-btn:disabled { opacity: .42; }
+  .category { border-left: 5px solid var(--cat-accent); }
+  .category .cat-head { background: var(--cat-tint); }
+  .category .cat-count { color: var(--cat-accent); background: #fff; }
+  .category .cat-count.zero { color: #6f7873; background: rgba(255,255,255,.72); }
+  .category .chevron { color: var(--cat-accent); }
+  @media (max-width: 390px) {
+    .section-title.section-bar { align-items: flex-start; }
+    .bulk-controls { width: 100%; }
+    .bulk-btn { flex: 1; }
+  }
+`;
+document.head.appendChild(bulkStyle);
+
+const sectionTitle = document.querySelector(".section-title");
+const expandAllBtn = document.createElement("button");
+const collapseAllBtn = document.createElement("button");
+
+function makeBulkControls() {
+  if (!sectionTitle) return;
+  sectionTitle.classList.add("section-bar");
+  sectionTitle.textContent = "";
+
+  const label = document.createElement("span");
+  label.textContent = "Lista completa";
+
+  const controls = document.createElement("div");
+  controls.className = "bulk-controls";
+
+  expandAllBtn.type = "button";
+  expandAllBtn.className = "bulk-btn";
+  expandAllBtn.textContent = "Espandi tutte";
+  expandAllBtn.setAttribute("aria-label", "Espandi tutte le categorie");
+
+  collapseAllBtn.type = "button";
+  collapseAllBtn.className = "bulk-btn";
+  collapseAllBtn.textContent = "Comprimi tutte";
+  collapseAllBtn.setAttribute("aria-label", "Comprimi tutte le categorie");
+
+  controls.append(expandAllBtn, collapseAllBtn);
+  sectionTitle.append(label, controls);
+}
+
+function setAllCollapsed(collapsed) {
+  const updates = {};
+  Object.entries(state.cats).forEach(([cid, cat]) => {
+    if (cat.collapsed === collapsed) return;
+    cat.collapsed = collapsed;
+    updates[`cats/${cid}/collapsed`] = collapsed;
+  });
+  if (!Object.keys(updates).length) return;
+  saveLocal();
+  wUpdate(updates);
+  render();
+  refreshCategoryUI();
+}
+
+function refreshCategoryUI() {
+  const cats = catList();
+  Array.from(listEl.children).forEach((categoryEl, index) => {
+    const cat = cats[index];
+    if (!cat) return;
+    const palette = categoryPalette[Math.abs(cat.order) % categoryPalette.length];
+    categoryEl.style.setProperty("--cat-accent", palette.accent);
+    categoryEl.style.setProperty("--cat-tint", palette.tint);
+  });
+  expandAllBtn.disabled = !cats.length || cats.every(cat => !cat.collapsed);
+  collapseAllBtn.disabled = !cats.length || cats.every(cat => cat.collapsed);
+}
+
+makeBulkControls();
+expandAllBtn.addEventListener("click", () => setAllCollapsed(false));
+collapseAllBtn.addEventListener("click", () => setAllCollapsed(true));
+new MutationObserver(refreshCategoryUI).observe(listEl, { childList: true });
+
 render();
+refreshCategoryUI();
 </script>
 </body>
 </html>
