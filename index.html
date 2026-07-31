@@ -90,6 +90,54 @@
   .tag .x { font-size: 16px; opacity: .85; }
   .clearbtn { background: none; border: none; color: var(--green); font-weight: 600; font-size: 13px; }
 
+  /* ---- SEARCH ---- */
+  .searchbar {
+    background: var(--card);
+    margin: 10px;
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    padding: 10px 12px;
+  }
+  .search-wrap {
+    display: flex; align-items: center; gap: 8px;
+    background: #f0f2f1; border-radius: 10px; padding: 0 10px;
+  }
+  .search-wrap:focus-within { outline: 2px solid var(--green); }
+  .search-ic { color: var(--muted); font-size: 15px; flex: 0 0 auto; }
+  .search-wrap input {
+    flex: 1; border: none; background: none;
+    padding: 11px 4px; font-size: 16px; outline: none; color: var(--text);
+  }
+  .search-clear {
+    display: none; background: none; border: none;
+    color: var(--muted); font-size: 20px; padding: 4px; line-height: 1;
+  }
+  .search-wrap.has-text .search-clear { display: block; }
+  .search-results { margin-top: 8px; }
+  .search-results:empty { display: none; }
+  .sr-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 6px; border-top: 1px solid var(--line);
+  }
+  .sr-item:first-child { border-top: none; }
+  .sr-main { flex: 1; min-width: 0; cursor: pointer; }
+  .sr-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sr-cat { font-size: 12px; color: var(--muted); }
+  .sr-item.need .sr-name { color: var(--green-dark); font-weight: 600; }
+  .sr-add {
+    background: var(--green); color: #fff; border: none;
+    border-radius: 20px; padding: 8px 14px; font-size: 14px; font-weight: 600;
+    flex: 0 0 auto;
+  }
+  .sr-add:active { background: var(--green-dark); }
+  .sr-add.added { background: var(--need-bg); color: var(--green); }
+  .sr-del {
+    background: none; border: none; color: var(--danger);
+    font-size: 18px; padding: 4px 8px; flex: 0 0 auto; line-height: 1;
+  }
+  .sr-new { color: var(--green); font-weight: 600; }
+  .sr-empty { color: var(--muted); font-size: 14px; padding: 12px 6px; text-align: center; }
+
   /* ---- FULL LIST (bottom) ---- */
   .section-title { padding: 14px 16px 4px; font-size: 13px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .category {
@@ -254,6 +302,16 @@
   <button class="gear" id="btnGear" title="Impostazioni">&#9881;</button>
 </header>
 
+<!-- SEARCH -->
+<div class="searchbar">
+  <div class="search-wrap">
+    <span class="search-ic">&#128269;</span>
+    <input type="text" id="searchInput" placeholder="Cerca articolo..." autocomplete="off">
+    <button class="search-clear" id="searchClear" aria-label="Pulisci ricerca">&times;</button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
+
 <!-- TO BUY -->
 <div class="tobuy">
   <div class="tobuy-head">
@@ -338,6 +396,7 @@ const DEFAULT = {
 const KEY = "spesa_v2";
 let state = toKeyed(loadLocalRaw());
 let editMode = false;
+var searchRefresh = null; // set once the search UI is wired; keeps results in sync after add/delete
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
@@ -519,7 +578,7 @@ const listEl = document.getElementById("list");
 const tobuyBody = document.getElementById("tobuyBody");
 const tbCount = document.getElementById("tbCount");
 
-function render() { renderToBuy(); renderList(); }
+function render() { renderToBuy(); renderList(); if (searchRefresh) searchRefresh(); }
 
 function renderToBuy() {
   tobuyBody.innerHTML = "";
@@ -807,6 +866,97 @@ makeBulkControls();
 expandAllBtn.addEventListener("click", () => setAllCollapsed(false));
 collapseAllBtn.addEventListener("click", () => setAllCollapsed(true));
 new MutationObserver(refreshCategoryUI).observe(listEl, { childList: true });
+
+// ---- Search: find any catalog item, add it to "Da comprare", or delete it ----
+const searchInput = document.getElementById("searchInput");
+const searchResults = document.getElementById("searchResults");
+const searchWrap = document.querySelector(".search-wrap");
+const searchClear = document.getElementById("searchClear");
+
+function allItemsFlat() {
+  const out = [];
+  catList().forEach(cat => {
+    itemList(cat).forEach(it => out.push({ cid: cat.id, catName: cat.name, id: it.id, name: it.name, need: it.need }));
+  });
+  return out;
+}
+
+function renderSearch() {
+  const raw = searchInput.value.trim();
+  const q = raw.toLowerCase();
+  searchWrap.classList.toggle("has-text", !!searchInput.value);
+  if (!q) { searchResults.innerHTML = ""; return; }
+
+  const all = allItemsFlat();
+  const matches = all
+    .filter(it => it.name.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const ai = a.name.toLowerCase().indexOf(q), bi = b.name.toLowerCase().indexOf(q);
+      if (ai !== bi) return ai - bi;                 // prefix matches first
+      return a.name.localeCompare(b.name, "it");
+    });
+  const exact = all.some(it => it.name.toLowerCase() === q);
+
+  searchResults.innerHTML = "";
+
+  matches.slice(0, 40).forEach(it => {
+    const row = document.createElement("div");
+    row.className = "sr-item" + (it.need ? " need" : "");
+
+    const main = document.createElement("div");
+    main.className = "sr-main";
+    main.innerHTML = '<div class="sr-name">' + esc(it.name) + '</div><div class="sr-cat">' + esc(it.catName) + '</div>';
+    main.addEventListener("click", () => setNeed(it.cid, it.id, !it.need));
+
+    const add = document.createElement("button");
+    add.className = "sr-add" + (it.need ? " added" : "");
+    add.innerHTML = it.need ? "&#10003; Aggiunto" : "+ Aggiungi";
+    add.addEventListener("click", (e) => { e.stopPropagation(); setNeed(it.cid, it.id, !it.need); });
+
+    const del = document.createElement("button");
+    del.className = "sr-del";
+    del.innerHTML = "&#128465;";
+    del.setAttribute("aria-label", "Elimina " + it.name);
+    del.addEventListener("click", (e) => { e.stopPropagation(); deleteItem(it.cid, it.id); });
+
+    row.append(main, add, del);
+    searchResults.appendChild(row);
+  });
+
+  if (raw && !exact) {                                // offer to create a brand-new item
+    const row = document.createElement("div");
+    row.className = "sr-item";
+    const main = document.createElement("div");
+    main.className = "sr-main sr-new";
+    main.textContent = 'Nuovo articolo: "' + raw + '"';
+    const add = document.createElement("button");
+    add.className = "sr-add";
+    add.textContent = "+ Crea";
+    const create = () => openNewItemFromSearch(raw);
+    main.addEventListener("click", create);
+    add.addEventListener("click", (e) => { e.stopPropagation(); create(); });
+    row.append(main, add);
+    searchResults.appendChild(row);
+  }
+
+  if (!searchResults.children.length) {
+    searchResults.innerHTML = '<div class="sr-empty">Nessun risultato</div>';
+  }
+}
+
+// Reuse the existing add-item modal, prefilled with the searched name so the user picks a category.
+function openNewItemFromSearch(name) {
+  const cats = catList();
+  if (!cats.length) { alert("Crea prima una categoria (rotellina impostazioni)."); return; }
+  itemCat.innerHTML = cats.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join("");
+  itemName.value = name;
+  modalItem.classList.add("open");
+  setTimeout(() => itemName.focus(), 100);
+}
+
+searchInput.addEventListener("input", renderSearch);
+searchClear.addEventListener("click", () => { searchInput.value = ""; renderSearch(); searchInput.focus(); });
+searchRefresh = renderSearch;   // let render() keep search results current after add/delete/sync
 
 render();
 refreshCategoryUI();
