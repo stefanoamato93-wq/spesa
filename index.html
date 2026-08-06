@@ -946,9 +946,12 @@ function renderSearch() {
 }
 
 // Clear the search bar (and results) after adding an item to "Da comprare".
+// Keep focus on the input so the mobile keyboard stays up to add another item.
+// Focus must be set synchronously within the tap handler, or iOS Safari drops the keyboard.
 function clearSearch() {
   searchInput.value = "";
   renderSearch();
+  searchInput.focus();
 }
 
 // Toggle need from a search result; when the item is being ADDED to the buy list, clear the search.
