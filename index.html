@@ -742,6 +742,7 @@ function saveItem() {
   const cid = itemCat.value;
   modalItem.classList.remove("open");
   addItem(cid, v, true); // aggiunto = subito da comprare
+  clearSearch();
 }
 
 // ---- Add category modal ----
@@ -906,12 +907,12 @@ function renderSearch() {
     const main = document.createElement("div");
     main.className = "sr-main";
     main.innerHTML = '<div class="sr-name">' + esc(it.name) + '</div><div class="sr-cat">' + esc(it.catName) + '</div>';
-    main.addEventListener("click", () => setNeed(it.cid, it.id, !it.need));
+    main.addEventListener("click", () => toggleNeedFromSearch(it));
 
     const add = document.createElement("button");
     add.className = "sr-add" + (it.need ? " added" : "");
     add.innerHTML = it.need ? "&#10003; Aggiunto" : "+ Aggiungi";
-    add.addEventListener("click", (e) => { e.stopPropagation(); setNeed(it.cid, it.id, !it.need); });
+    add.addEventListener("click", (e) => { e.stopPropagation(); toggleNeedFromSearch(it); });
 
     const del = document.createElement("button");
     del.className = "sr-del";
@@ -942,6 +943,19 @@ function renderSearch() {
   if (!searchResults.children.length) {
     searchResults.innerHTML = '<div class="sr-empty">Nessun risultato</div>';
   }
+}
+
+// Clear the search bar (and results) after adding an item to "Da comprare".
+function clearSearch() {
+  searchInput.value = "";
+  renderSearch();
+}
+
+// Toggle need from a search result; when the item is being ADDED to the buy list, clear the search.
+function toggleNeedFromSearch(it) {
+  const adding = !it.need;
+  setNeed(it.cid, it.id, adding);
+  if (adding) clearSearch();
 }
 
 // Reuse the existing add-item modal, prefilled with the searched name so the user picks a category.
