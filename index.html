@@ -360,7 +360,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, set, update, remove }
+import { getDatabase, ref, onValue, set, update, remove, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
@@ -427,6 +427,7 @@ if (syncEnabled) {
       state = fromRemote(remote);          // normal path: apply shared truth
       saveLocal();
       render();
+      if (remote.inbox) processInbox(remote.inbox);
     });
   } catch (e) { console.error("Firebase init failed:", e); setStatus("offline"); }
 } else { setStatus(""); }
@@ -436,6 +437,51 @@ function wField(path, val) { if (db) set(ref(db, `lists/${ROOM}/${path}`), val).
 function wRemove(path)     { if (db) remove(ref(db, `lists/${ROOM}/${path}`)).catch(console.error); }
 function wUpdate(obj)      { if (db) update(ref(db, `lists/${ROOM}`), obj).catch(console.error); }
 function pushFull()        { if (db) set(ref(db, `lists/${ROOM}`), state).catch(console.error); }
+
+// ---- Siri inbox ----
+// The "Aggiungi spesa" Shortcut POSTs { name, source: "siri" } to lists/<ROOM>/inbox.
+// Any open device claims each entry once (transaction), so two open phones never double-add.
+// "latte, uova e pane" -> 3 items. A known item (any category) is ticked; else it goes to "Altro".
+const SIRI_CAT = "Altro";
+function normName(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+function stem(s) { return s.length > 3 ? s.replace(/[aeiou]$/, "") : s; }   // pomodoro ~ Pomodori, uovo ~ Uova
+function findItem(name) {
+  const n = normName(name); if (!n) return null;
+  let loose = null;
+  for (const c of catList()) for (const it of itemList(c)) {
+    const m = normName(it.name);
+    if (m === n) return { cid: c.id, iid: it.id };
+    if (!loose && stem(m) === stem(n)) loose = { cid: c.id, iid: it.id };
+  }
+  return loose;
+}
+function siriAdd(name) {
+  const hit = findItem(name);
+  if (hit) { setNeed(hit.cid, hit.iid, true); return; }
+  let cat = catList().find(c => normName(c.name) === normName(SIRI_CAT));
+  if (!cat) { addCat(SIRI_CAT); cat = catList().find(c => c.name === SIRI_CAT); }
+  const clean = String(name).trim();
+  addItem(cat.id, clean.charAt(0).toUpperCase() + clean.slice(1), true);
+}
+const inboxSeen = new Set();
+function processInbox(inbox) {
+  Object.keys(inbox).forEach(key => {
+    if (inboxSeen.has(key)) return;
+    inboxSeen.add(key);
+    let claimed = null;
+    runTransaction(ref(db, `lists/${ROOM}/inbox/${key}`), cur => {
+      claimed = cur;
+      return cur === null ? undefined : null;     // delete it if still there, else abort
+    }).then(res => {
+      if (!res.committed || !claimed) return;
+      String(claimed.name || "").split(/\s*,\s*|\s+e\s+|\s+ed\s+|\n/i)
+        .map(s => s.trim()).filter(Boolean).forEach(siriAdd);
+    }).catch(console.error);
+  });
+}
 
 // ---- Persistence / shape ----
 function loadLocalRaw() {
