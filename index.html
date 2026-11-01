@@ -466,6 +466,31 @@ function siriAdd(name) {
   const clean = String(name).trim();
   addItem(cat.id, clean.charAt(0).toUpperCase() + clean.slice(1), true);
 }
+// Siri often drops the commas: "acqua pomodori patate". If the whole chunk is not a known
+// item, read it word by word, longest known name first (up to 3 words: "sale grosso").
+// Unknown words next to each other stay together as one new item.
+const STOP = new Set("il lo la l i gli le un uno una del dello della dei degli delle di poi anche".split(" "));
+function splitSpoken(chunk) {
+  if (findItem(chunk)) return [chunk];
+  const w = chunk.split(/\s+/);
+  if (w.length < 2) return [chunk];
+  const out = []; let unknown = [];
+  for (let i = 0; i < w.length;) {
+    let took = 0;
+    for (let n = Math.min(3, w.length - i); n >= 1; n--) {
+      if (findItem(w.slice(i, i + n).join(" "))) { took = n; break; }
+    }
+    if (took) {
+      if (unknown.length) { out.push(unknown.join(" ")); unknown = []; }
+      out.push(w.slice(i, i + took).join(" ")); i += took;
+    } else if (STOP.has(normName(w[i]))) {          // "il latte", "poi le uova"
+      if (unknown.length) { out.push(unknown.join(" ")); unknown = []; }
+      i++;
+    } else { unknown.push(w[i]); i++; }
+  }
+  if (unknown.length) out.push(unknown.join(" "));
+  return out;
+}
 const inboxSeen = new Set();
 function processInbox(inbox) {
   Object.keys(inbox).forEach(key => {
@@ -477,8 +502,8 @@ function processInbox(inbox) {
       return cur === null ? undefined : null;     // delete it if still there, else abort
     }).then(res => {
       if (!res.committed || !claimed) return;
-      String(claimed.name || "").split(/\s*,\s*|\s+e\s+|\s+ed\s+|\n/i)
-        .map(s => s.trim()).filter(Boolean).forEach(siriAdd);
+      String(claimed.name || "").split(/\s*[,;.]\s*|\s+e\s+|\s+ed\s+|\n/i)
+        .map(s => s.trim()).filter(Boolean).flatMap(splitSpoken).forEach(siriAdd);
     }).catch(console.error);
   });
 }
