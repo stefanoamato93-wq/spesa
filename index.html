@@ -298,7 +298,7 @@
 <body>
 
 <header>
-  <h1><span class="dot" id="statusDot"></span> Spesa</h1>
+  <h1><span class="dot" id="statusDot"></span> Spesa <span id="appVer" style="font-size:11px;font-weight:500;color:var(--muted)"></span></h1>
   <button class="gear" id="btnGear" title="Impostazioni">&#9881;</button>
 </header>
 
@@ -374,6 +374,8 @@ const firebaseConfig = {
   measurementId: "G-R8MMWYWPP9"
 };
 const ROOM = "casa";
+const APP_VER = "V1";   // bump on every push (V2, V3...), shown next to the title
+document.getElementById("appVer").textContent = APP_VER;
 
 // ---- Default data ----
 const DEFAULT = {
